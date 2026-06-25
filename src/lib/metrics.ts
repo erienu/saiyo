@@ -1,5 +1,17 @@
-import type { Applicant, PositionTarget, Stage } from '../types';
+import type { Applicant, DateRange, HealthScoreConfig, PositionTarget, SignalColor, Stage } from '../types';
 import { STAGES } from '../types';
+
+/** 応募日が指定期間(両端含む)に含まれる応募者のみを残す。start/endがnullなら無制限。 */
+export function filterByPeriod(applicants: Applicant[], range: DateRange): Applicant[] {
+  if (!range.start && !range.end) return applicants;
+  const startMs = range.start ? new Date(range.start).getTime() : -Infinity;
+  const endMs = range.end ? new Date(range.end).getTime() : Infinity;
+  return applicants.filter((a) => {
+    if (!a.appliedDate) return false;
+    const t = new Date(a.appliedDate).getTime();
+    return t >= startMs && t <= endMs;
+  });
+}
 
 export function getPositions(applicants: Applicant[]): string[] {
   return Array.from(new Set(applicants.map((a) => a.position))).sort();
@@ -207,4 +219,104 @@ export function buildMonthlyTrend(applicants: Applicant[]): MonthlyTrendPoint[] 
   return Array.from(counts.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, applicants]) => ({ month, applicants }));
+}
+
+export interface PipelineStagePoint {
+  stage: Stage;
+  count: number;
+  transitionRate: number | null; // 直前ステージからの遷移率(%)
+  overallRate: number; // 応募者数に対する到達率(%)
+}
+
+export interface PositionPipeline {
+  position: string;
+  totalApplicants: number;
+  stages: PipelineStagePoint[];
+}
+
+/** ポジション別の応募〜内定承諾パイプライン(各ステージの人数・遷移率・全体到達率) */
+export function buildPositionPipelines(applicants: Applicant[]): PositionPipeline[] {
+  const positions = getPositions(applicants);
+  return positions.map((position) => {
+    const rows = applicants.filter((a) => a.position === position);
+    const totalApplicants = rows.length;
+    let prevCount: number | null = null;
+    const stages: PipelineStagePoint[] = STAGES.map((stage) => {
+      const count = rows.filter((a) => a.stageDates[stage] !== null).length;
+      const transitionRate =
+        prevCount !== null ? (prevCount > 0 ? Math.round((count / prevCount) * 1000) / 10 : 0) : null;
+      const overallRate = totalApplicants > 0 ? Math.round((count / totalApplicants) * 1000) / 10 : 0;
+      prevCount = count;
+      return { stage, count, transitionRate, overallRate };
+    });
+    return { position, totalApplicants, stages };
+  });
+}
+
+export interface HealthScoreResult {
+  actualCount: number;
+  targetCount: number;
+  elapsedPercent: number; // 期間の経過率(%)
+  expectedByNow: number;
+  achievementRate: number | null; // expectedByNowに対する達成率(%)。目標未設定/期間未指定ならnull
+  signal: SignalColor;
+  periodDefined: boolean; // 開始日・終了日が両方指定されているか
+}
+
+/**
+ * 「1次面接 or カジュアル面談 設定率」ヘルススコア。
+ * 期間内の経過日数に応じた目標(ペース)に対して、実際に設定できた件数の達成率を信号で示す。
+ */
+export function buildHealthScore(
+  periodApplicants: Applicant[],
+  range: DateRange,
+  config: HealthScoreConfig,
+  today: Date = new Date()
+): HealthScoreResult {
+  const actualCount = periodApplicants.filter(
+    (a) => a.stageDates['カジュアル面談'] !== null || a.stageDates['1次面接'] !== null
+  ).length;
+
+  const periodDefined = Boolean(range.start && range.end);
+
+  let elapsedPercent = 0;
+  if (range.start && range.end) {
+    const startMs = new Date(range.start).getTime();
+    const endMs = new Date(range.end).getTime();
+    const nowMs = today.getTime();
+    if (endMs > startMs) {
+      elapsedPercent = Math.round(
+        (Math.min(Math.max(nowMs - startMs, 0), endMs - startMs) / (endMs - startMs)) * 1000
+      ) / 10;
+    }
+  }
+
+  const expectedByNow = periodDefined
+    ? Math.round(config.intervalTargetCount * (elapsedPercent / 100) * 10) / 10
+    : 0;
+  const achievementRate =
+    periodDefined && config.intervalTargetCount > 0
+      ? expectedByNow > 0
+        ? Math.round((actualCount / expectedByNow) * 1000) / 10
+        : 100
+      : null;
+
+  let signal: SignalColor = 'green';
+  if (achievementRate === null) {
+    signal = 'green';
+  } else if (achievementRate < config.redBelowPercent) {
+    signal = 'red';
+  } else if (achievementRate < config.yellowBelowPercent) {
+    signal = 'yellow';
+  }
+
+  return {
+    periodDefined,
+    actualCount,
+    targetCount: config.intervalTargetCount,
+    elapsedPercent,
+    expectedByNow,
+    achievementRate,
+    signal,
+  };
 }

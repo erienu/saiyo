@@ -41,3 +41,18 @@ export interface PositionTarget {
   targetCount: number;
   period: string;
 }
+
+export interface DateRange {
+  start: string | null; // YYYY-MM-DD
+  end: string | null; // YYYY-MM-DD
+}
+
+// 「1次面接 or カジュアル面談 設定率」ヘルススコアのKPI設定。
+// 期間内に設定すべき面談件数の目標と、経過日数に対する達成率のしきい値(赤/黄/緑)。
+export interface HealthScoreConfig {
+  intervalTargetCount: number;
+  redBelowPercent: number; // この%未満は赤
+  yellowBelowPercent: number; // この%未満(赤以上)は黄、以上は緑
+}
+
+export type SignalColor = 'red' | 'yellow' | 'green';

@@ -9,35 +9,54 @@ import ChannelTable from './components/ChannelTable';
 import ChannelChart from './components/ChannelChart';
 import InterviewerTable from './components/InterviewerTable';
 import TargetSettings from './components/TargetSettings';
-import TargetProgressCards from './components/TargetProgressCards';
+import HiringSummaryHero from './components/HiringSummaryHero';
+import HealthScoreSignal from './components/HealthScoreSignal';
+import KpiSettings from './components/KpiSettings';
+import PeriodFilter, { currentMonthRange } from './components/PeriodFilter';
+import PositionPipelineTable from './components/PositionPipelineTable';
 import { parseApplicantsCsv } from './lib/csv';
+import { generateHealthScoreAdvice } from './lib/advice';
 import {
   buildChannelStats,
   buildFunnel,
+  buildHealthScore,
   buildInterviewerStats,
   buildLeadTimes,
   buildMonthlyTrend,
   buildOverallLeadTime,
+  buildPositionPipelines,
   buildTargetProgress,
+  filterByPeriod,
   getPositions,
 } from './lib/metrics';
-import { loadTargets, saveTargets } from './lib/storage';
-import type { Applicant, PositionTarget } from './types';
+import {
+  loadHealthScoreConfig,
+  loadTargets,
+  saveHealthScoreConfig,
+  saveTargets,
+} from './lib/storage';
+import type { Applicant, DateRange, HealthScoreConfig, PositionTarget } from './types';
 
 function App() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [targets, setTargets] = useState<PositionTarget[]>(loadTargets());
+  const [healthScoreConfig, setHealthScoreConfig] = useState<HealthScoreConfig>(
+    loadHealthScoreConfig()
+  );
   const [selectedPosition, setSelectedPosition] = useState<string>('全ポジション');
+  const [period, setPeriod] = useState<DateRange>(() => currentMonthRange());
 
   const positions = useMemo(() => getPositions(applicants), [applicants]);
+
+  const periodFiltered = useMemo(() => filterByPeriod(applicants, period), [applicants, period]);
 
   const filtered = useMemo(
     () =>
       selectedPosition === '全ポジション'
-        ? applicants
-        : applicants.filter((a) => a.position === selectedPosition),
-    [applicants, selectedPosition]
+        ? periodFiltered
+        : periodFiltered.filter((a) => a.position === selectedPosition),
+    [periodFiltered, selectedPosition]
   );
 
   const funnel = useMemo(() => buildFunnel(filtered), [filtered]);
@@ -50,6 +69,15 @@ function App() {
     [filtered]
   );
   const monthlyTrend = useMemo(() => buildMonthlyTrend(filtered), [filtered]);
+  const positionPipelines = useMemo(() => buildPositionPipelines(filtered), [filtered]);
+  const healthScore = useMemo(
+    () => buildHealthScore(filtered, period, healthScoreConfig),
+    [filtered, period, healthScoreConfig]
+  );
+  const healthAdvice = useMemo(
+    () => generateHealthScoreAdvice(healthScore, leadTimes, channelStats),
+    [healthScore, leadTimes, channelStats]
+  );
 
   const hiredCount = filtered.filter((a) => a.status === '内定承諾').length;
   const activeCount = filtered.filter((a) => a.status === '進行中').length;
@@ -65,6 +93,11 @@ function App() {
   const handleTargetsChange = (next: PositionTarget[]) => {
     setTargets(next);
     saveTargets(next);
+  };
+
+  const handleHealthScoreConfigChange = (next: HealthScoreConfig) => {
+    setHealthScoreConfig(next);
+    saveHealthScoreConfig(next);
   };
 
   return (
@@ -87,6 +120,13 @@ function App() {
           </div>
         ) : (
           <>
+            <HiringSummaryHero data={targetProgress} />
+
+            <PeriodFilter range={period} onChange={setPeriod} />
+
+            <KpiSettings config={healthScoreConfig} onChange={handleHealthScoreConfigChange} />
+            <HealthScoreSignal health={healthScore} advice={healthAdvice} />
+
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-slate-500">ポジション:</span>
               {['全ポジション', ...positions].map((p) => (
@@ -119,14 +159,11 @@ function App() {
 
             <TargetSettings positions={positions} targets={targets} onChange={handleTargetsChange} />
 
-            <Section title="採用目標と達成率" description="ポジションごとの目標人数に対する内定承諾数の進捗">
-              <TargetProgressCards
-                data={
-                  selectedPosition === '全ポジション'
-                    ? targetProgress
-                    : targetProgress.filter((t) => t.position === selectedPosition)
-                }
-              />
+            <Section
+              title="ポジション別パイプライン（応募〜内定承諾）"
+              description="各ステージの人数・直前ステージからの遷移率・応募者全体に対する到達率"
+            >
+              <PositionPipelineTable data={positionPipelines} />
             </Section>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -144,7 +181,7 @@ function App() {
 
             <Section
               title="流入経路（チャネル）別分析"
-              description="チャネルごとの応募数・通過率・コスト・採用単価"
+              description="チャネルごとの応募数シェア・通過率・コスト・採用単価"
             >
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <ChannelChart data={channelStats} />
