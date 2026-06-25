@@ -2,11 +2,12 @@ import { useRef } from 'react';
 
 interface Props {
   onLoad: (text: string) => void;
+  onClear: () => void;
   errors: string[];
   count: number;
 }
 
-export default function FileUpload({ onLoad, errors, count }: Props) {
+export default function FileUpload({ onLoad, onClear, errors, count }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File) => {
@@ -38,6 +39,7 @@ export default function FileUpload({ onLoad, errors, count }: Props) {
           <h2 className="text-sm font-semibold text-slate-700">応募者データ（CSV）</h2>
           <p className="text-xs text-slate-500">
             このダッシュボード用CSV、またはHRMOSの応募者情報エクスポートをそのまま取り込めます。
+            読み込んだデータはこのブラウザに保存され、次回アクセス時も表示されます。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -65,10 +67,22 @@ export default function FileUpload({ onLoad, errors, count }: Props) {
               e.target.value = '';
             }}
           />
+          {count > 0 && (
+            <button
+              onClick={() => {
+                if (window.confirm('保存されている応募者データを削除しますか？この操作は取り消せません。')) {
+                  onClear();
+                }
+              }}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+            >
+              データを削除
+            </button>
+          )}
         </div>
       </div>
       {count > 0 && (
-        <p className="text-xs text-emerald-600">{count}件の応募者データを読み込みました。</p>
+        <p className="text-xs text-emerald-600">{count}件の応募者データを読み込みました。（ブラウザに保存済み）</p>
       )}
       {errors.length > 0 && (
         <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">

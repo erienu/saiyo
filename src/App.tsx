@@ -30,15 +30,18 @@ import {
   getPositions,
 } from './lib/metrics';
 import {
+  clearApplicants,
+  loadApplicants,
   loadHealthScoreConfig,
   loadTargets,
+  saveApplicants,
   saveHealthScoreConfig,
   saveTargets,
 } from './lib/storage';
 import type { Applicant, DateRange, HealthScoreConfig, PositionTarget } from './types';
 
 function App() {
-  const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [applicants, setApplicants] = useState<Applicant[]>(() => loadApplicants());
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [targets, setTargets] = useState<PositionTarget[]>(loadTargets());
   const [healthScoreConfig, setHealthScoreConfig] = useState<HealthScoreConfig>(
@@ -107,8 +110,15 @@ function App() {
   const handleCsvLoad = (text: string) => {
     const { applicants: parsed, errors } = parseApplicantsCsv(text);
     setApplicants(parsed);
+    saveApplicants(parsed);
     setCsvErrors(errors);
     setSelectedPosition('全ポジション');
+  };
+
+  const handleClearApplicants = () => {
+    setApplicants([]);
+    setCsvErrors([]);
+    clearApplicants();
   };
 
   const handleTargetsChange = (next: PositionTarget[]) => {
@@ -133,7 +143,12 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-        <FileUpload onLoad={handleCsvLoad} errors={csvErrors} count={applicants.length} />
+        <FileUpload
+          onLoad={handleCsvLoad}
+          onClear={handleClearApplicants}
+          errors={csvErrors}
+          count={applicants.length}
+        />
 
         {applicants.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">

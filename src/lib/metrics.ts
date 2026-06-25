@@ -228,20 +228,29 @@ export interface PipelineStagePoint {
   overallRate: number; // 応募者数に対する到達率(%)
 }
 
+// カジュアル面談は実施しないポジションもあるため、メインのパイプラインからは外し別管理する。
+const MAIN_PIPELINE_STAGES: Stage[] = ['応募', '書類選考', '1次面接', '最終面接', '内定', '内定承諾'];
+
+export interface CasualInterviewStat {
+  count: number;
+  rateOfScreening: number; // 書類選考通過者に対する実施率(%)
+}
+
 export interface PositionPipeline {
   position: string;
   totalApplicants: number;
   stages: PipelineStagePoint[];
+  casualInterview: CasualInterviewStat;
 }
 
-/** ポジション別の応募〜内定承諾パイプライン(各ステージの人数・遷移率・全体到達率) */
+/** ポジション別の応募〜内定承諾パイプライン(各ステージの人数・遷移率・全体到達率)。カジュアル面談は別集計。 */
 export function buildPositionPipelines(applicants: Applicant[]): PositionPipeline[] {
   const positions = getPositions(applicants);
   return positions.map((position) => {
     const rows = applicants.filter((a) => a.position === position);
     const totalApplicants = rows.length;
     let prevCount: number | null = null;
-    const stages: PipelineStagePoint[] = STAGES.map((stage) => {
+    const stages: PipelineStagePoint[] = MAIN_PIPELINE_STAGES.map((stage) => {
       const count = rows.filter((a) => a.stageDates[stage] !== null).length;
       const transitionRate =
         prevCount !== null ? (prevCount > 0 ? Math.round((count / prevCount) * 1000) / 10 : 0) : null;
@@ -249,7 +258,15 @@ export function buildPositionPipelines(applicants: Applicant[]): PositionPipelin
       prevCount = count;
       return { stage, count, transitionRate, overallRate };
     });
-    return { position, totalApplicants, stages };
+
+    const screeningCount = rows.filter((a) => a.stageDates['書類選考'] !== null).length;
+    const casualCount = rows.filter((a) => a.stageDates['カジュアル面談'] !== null).length;
+    const casualInterview: CasualInterviewStat = {
+      count: casualCount,
+      rateOfScreening: screeningCount > 0 ? Math.round((casualCount / screeningCount) * 1000) / 10 : 0,
+    };
+
+    return { position, totalApplicants, stages, casualInterview };
   });
 }
 

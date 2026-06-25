@@ -1,7 +1,8 @@
-import type { HealthScoreConfig, PositionTarget } from '../types';
+import type { Applicant, HealthScoreConfig, PositionTarget } from '../types';
 
 const TARGETS_KEY = 'recruitment-dashboard:targets';
 const HEALTH_SCORE_CONFIG_KEY = 'recruitment-dashboard:health-score-config';
+const APPLICANTS_KEY = 'recruitment-dashboard:applicants';
 
 // タイムゾーンによる日付のズレを避けるため、UTC変換せずローカル日付からYYYY-MM-DDを作る。
 function isoDate(d: Date): string {
@@ -63,4 +64,27 @@ export function loadHealthScoreConfig(): HealthScoreConfig {
 
 export function saveHealthScoreConfig(config: HealthScoreConfig): void {
   localStorage.setItem(HEALTH_SCORE_CONFIG_KEY, JSON.stringify(config));
+}
+
+// 取り込んだ応募者データもブラウザのlocalStorageに保存し、再読み込み後も表示されるようにする。
+// 氏名・生年月日・住所などの個人情報はApplicant型に存在しないため、保存対象にも含まれない。
+export function loadApplicants(): Applicant[] {
+  try {
+    const raw = localStorage.getItem(APPLICANTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveApplicants(applicants: Applicant[]): void {
+  try {
+    localStorage.setItem(APPLICANTS_KEY, JSON.stringify(applicants));
+  } catch {
+    // ストレージ容量超過などは無視し、画面表示自体は継続させる。
+  }
+}
+
+export function clearApplicants(): void {
+  localStorage.removeItem(APPLICANTS_KEY);
 }
