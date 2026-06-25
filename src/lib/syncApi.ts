@@ -5,6 +5,7 @@ export interface DashboardState {
   applicants: unknown[];
   targets: unknown[];
   healthScoreConfigs: Record<string, unknown>;
+  channelCosts: Record<string, number>;
 }
 
 export class UnauthorizedError extends Error {

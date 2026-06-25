@@ -3,11 +3,11 @@ import FileUpload from './components/FileUpload';
 import PasswordGate from './components/PasswordGate';
 import KpiCards from './components/KpiCards';
 import Section from './components/Section';
-import FunnelChartView from './components/FunnelChartView';
 import MonthlyTrendChart from './components/MonthlyTrendChart';
 import LeadTimeChart from './components/LeadTimeChart';
 import ChannelTable from './components/ChannelTable';
 import ChannelChart from './components/ChannelChart';
+import ChannelCostSettings from './components/ChannelCostSettings';
 import InterviewerTable from './components/InterviewerTable';
 import TargetSettings from './components/TargetSettings';
 import HiringSummaryHero from './components/HiringSummaryHero';
@@ -19,7 +19,6 @@ import { parseApplicantsCsv } from './lib/csv';
 import { generateHealthScoreAdvice } from './lib/advice';
 import {
   buildChannelStats,
-  buildFunnel,
   buildHealthScore,
   buildInterviewerStats,
   buildLeadTimes,
@@ -28,15 +27,18 @@ import {
   buildPositionPipelines,
   buildTargetProgress,
   filterByPeriod,
+  getChannels,
   getPositions,
 } from './lib/metrics';
 import {
   clearApplicants,
   getHealthScoreConfigForPosition,
   loadApplicants,
+  loadChannelCosts,
   loadHealthScoreConfigs,
   loadTargets,
   saveApplicants,
+  saveChannelCosts,
   saveHealthScoreConfigs,
   saveTargets,
   type HealthScoreConfigsByPosition,
@@ -53,6 +55,7 @@ function App() {
   const [healthScoreConfigs, setHealthScoreConfigs] = useState<HealthScoreConfigsByPosition>(
     loadHealthScoreConfigs()
   );
+  const [channelCosts, setChannelCosts] = useState<Record<string, number>>(loadChannelCosts());
   const [selectedPosition, setSelectedPosition] = useState<string>('全ポジション');
   const [period, setPeriod] = useState<DateRange>(() => currentMonthRange());
 
@@ -62,13 +65,19 @@ function App() {
   const passwordRef = useRef<string | null>(null);
 
   const syncToServer = useCallback(
-    (next: { applicants?: Applicant[]; targets?: PositionTarget[]; healthScoreConfigs?: HealthScoreConfigsByPosition }) => {
+    (next: {
+      applicants?: Applicant[];
+      targets?: PositionTarget[];
+      healthScoreConfigs?: HealthScoreConfigsByPosition;
+      channelCosts?: Record<string, number>;
+    }) => {
       const password = passwordRef.current;
       if (!password) return;
       saveDashboardState(password, {
         applicants: next.applicants ?? applicants,
         targets: next.targets ?? targets,
         healthScoreConfigs: next.healthScoreConfigs ?? healthScoreConfigs,
+        channelCosts: next.channelCosts ?? channelCosts,
       }).catch((err) => {
         setSyncError(
           err instanceof UnauthorizedError
@@ -77,7 +86,7 @@ function App() {
         );
       });
     },
-    [applicants, targets, healthScoreConfigs]
+    [applicants, targets, healthScoreConfigs, channelCosts]
   );
 
   const unlock = useCallback(async (password: string) => {
@@ -87,20 +96,40 @@ function App() {
       const state = await fetchDashboardState(password);
       passwordRef.current = password;
       localStorage.setItem(PASSWORD_KEY, password);
-      if (state) {
-        const nextApplicants = (state.applicants as Applicant[]) ?? [];
-        const nextTargets = (state.targets as PositionTarget[]) ?? [];
-        const nextConfigs = (state.healthScoreConfigs as HealthScoreConfigsByPosition) ?? {};
-        setApplicants(nextApplicants);
-        setTargets(nextTargets);
-        setHealthScoreConfigs(nextConfigs);
-        saveApplicants(nextApplicants);
-        saveTargets(nextTargets);
-        saveHealthScoreConfigs(nextConfigs);
-      } else {
-        // サーバーに未保存(初回)の場合、このデバイスの既存データを送って他デバイスからも見えるようにする。
-        syncToServer({});
-      }
+      // サーバー側のフィールドが空(未保存)の場合は、このデバイスにある既存データを失わないよう
+      // フィールドごとに「空でない方」を採用する。採用した結果は最後にサーバーへ書き戻して整合させる。
+      const nextApplicants =
+        state && (state.applicants as Applicant[])?.length > 0 ? (state.applicants as Applicant[]) : applicants;
+      const nextTargets =
+        state && (state.targets as PositionTarget[])?.length > 0 ? (state.targets as PositionTarget[]) : targets;
+      const nextConfigs =
+        state && Object.keys(state.healthScoreConfigs ?? {}).length > 0
+          ? (state.healthScoreConfigs as HealthScoreConfigsByPosition)
+          : healthScoreConfigs;
+      const nextChannelCosts =
+        state && Object.keys(state.channelCosts ?? {}).length > 0
+          ? (state.channelCosts as Record<string, number>)
+          : channelCosts;
+
+      setApplicants(nextApplicants);
+      setTargets(nextTargets);
+      setHealthScoreConfigs(nextConfigs);
+      setChannelCosts(nextChannelCosts);
+      saveApplicants(nextApplicants);
+      saveTargets(nextTargets);
+      saveHealthScoreConfigs(nextConfigs);
+      saveChannelCosts(nextChannelCosts);
+
+      // 解決した状態をサーバーにも書き戻し、他デバイスとの不整合を解消する。
+      saveDashboardState(password, {
+        applicants: nextApplicants,
+        targets: nextTargets,
+        healthScoreConfigs: nextConfigs,
+        channelCosts: nextChannelCosts,
+      }).catch(() => {
+        /* 初回同期の書き戻し失敗は致命的ではないため無視する */
+      });
+
       setAuthStatus('unlocked');
     } catch (err) {
       localStorage.removeItem(PASSWORD_KEY);
@@ -110,6 +139,7 @@ function App() {
         err instanceof UnauthorizedError ? 'パスワードが正しくありません。' : 'サーバーに接続できませんでした。'
       );
     }
+    // unlock時点のapplicants/targets/healthScoreConfigs/channelCostsはローカル初期値の参照で十分なため依存配列に含めない。
   }, []);
 
   useEffect(() => {
@@ -133,11 +163,14 @@ function App() {
     [periodFiltered, selectedPosition]
   );
 
-  const funnel = useMemo(() => buildFunnel(filtered), [filtered]);
   const targetProgress = useMemo(() => buildTargetProgress(applicants, targets), [applicants, targets]);
   const leadTimes = useMemo(() => buildLeadTimes(filtered), [filtered]);
   const overallLeadTime = useMemo(() => buildOverallLeadTime(filtered), [filtered]);
-  const channelStats = useMemo(() => buildChannelStats(filtered), [filtered]);
+  const channels = useMemo(() => getChannels(applicants), [applicants]);
+  const channelStats = useMemo(
+    () => buildChannelStats(filtered, channelCosts),
+    [filtered, channelCosts]
+  );
   const { rows: interviewerRows, stageAverages } = useMemo(
     () => buildInterviewerStats(filtered),
     [filtered]
@@ -197,6 +230,12 @@ function App() {
     setHealthScoreConfigs(updated);
     saveHealthScoreConfigs(updated);
     syncToServer({ healthScoreConfigs: updated });
+  };
+
+  const handleChannelCostsChange = (next: Record<string, number>) => {
+    setChannelCosts(next);
+    saveChannelCosts(next);
+    syncToServer({ channelCosts: next });
   };
 
   if (authStatus !== 'unlocked') {
@@ -308,18 +347,22 @@ function App() {
               <PositionPipelineTable data={positionPipelines} />
             </Section>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Section title="選考ステージ別人数（ファネル）" description="各ステージに到達した人数">
-                <FunnelChartView data={funnel} />
-              </Section>
-              <Section title="月別応募数推移">
-                <MonthlyTrendChart data={monthlyTrend} />
-              </Section>
-            </div>
+            <Section title="月別応募数推移">
+              <MonthlyTrendChart data={monthlyTrend} />
+            </Section>
 
-            <Section title="選考スピード（リードタイム）" description="隣接ステージ間の平均通過日数">
+            <Section
+              title="選考スピード（リードタイム）"
+              description="隣接ステージ間の平均通過日数（カジュアル面談は除く）"
+            >
               <LeadTimeChart data={leadTimes} />
             </Section>
+
+            <ChannelCostSettings
+              channels={channels}
+              costs={channelCosts}
+              onChange={handleChannelCostsChange}
+            />
 
             <Section
               title="流入経路（チャネル）別分析"

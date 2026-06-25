@@ -5,7 +5,7 @@ export default function PositionPipelineTable({ data }: { data: PositionPipeline
     return <p className="text-sm text-slate-400">データがありません。</p>;
   }
 
-  const stageNames = data[0].stages.map((s) => s.stage);
+  const stages = data[0].stages;
 
   return (
     <div className="overflow-x-auto">
@@ -13,12 +13,23 @@ export default function PositionPipelineTable({ data }: { data: PositionPipeline
         <thead>
           <tr className="border-b border-slate-200 text-xs text-slate-500">
             <th className="py-2 pr-4">ポジション</th>
-            {stageNames.map((stage) => (
-              <th key={stage} className="py-2 pr-4 text-right">
-                {stage}
-              </th>
-            ))}
-            <th className="py-2 pr-4 text-right text-slate-400">カジュアル面談（参考）</th>
+            {stages.flatMap((s, i) =>
+              i === 0
+                ? [
+                    <th key={s.stage} className="py-2 pr-4 text-right">
+                      {s.stage}
+                    </th>,
+                  ]
+                : [
+                    <th key={`arrow-${s.stage}`} className="px-1 text-center text-slate-300">
+                      →
+                    </th>,
+                    <th key={s.stage} className="py-2 pr-4 text-right">
+                      {s.stage}
+                    </th>,
+                  ]
+            )}
+            <th className="py-2 pl-4 text-right text-slate-400">カジュアル面談（参考）</th>
           </tr>
         </thead>
         <tbody>
@@ -28,16 +39,27 @@ export default function PositionPipelineTable({ data }: { data: PositionPipeline
                 {p.position}
                 <p className="text-xs font-normal text-slate-400">応募 {p.totalApplicants} 件</p>
               </td>
-              {p.stages.map((s) => (
-                <td key={s.stage} className="py-2 pr-4 text-right">
-                  <div className="font-medium text-slate-700">{s.count}件</div>
-                  <div className="text-xs text-slate-400">
-                    {s.transitionRate === null ? '—' : `遷移 ${s.transitionRate}%`}
-                  </div>
-                  <div className="text-xs text-slate-400">全体 {s.overallRate}%</div>
-                </td>
-              ))}
-              <td className="py-2 pr-4 text-right text-slate-500">
+              {p.stages.flatMap((s, i) =>
+                i === 0
+                  ? [
+                      <td key={s.stage} className="py-2 pr-4 text-right">
+                        <div className="font-medium text-slate-700">{s.count}件</div>
+                        <div className="text-xs text-slate-400">全体 {s.overallRate}%</div>
+                      </td>,
+                    ]
+                  : [
+                      <td key={`rate-${s.stage}`} className="px-1 text-center">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {s.transitionRate === null ? '—' : `${s.transitionRate}%`}
+                        </span>
+                      </td>,
+                      <td key={s.stage} className="py-2 pr-4 text-right">
+                        <div className="font-medium text-slate-700">{s.count}件</div>
+                        <div className="text-xs text-slate-400">全体 {s.overallRate}%</div>
+                      </td>,
+                    ]
+              )}
+              <td className="py-2 pl-4 text-right text-slate-500">
                 <div className="font-medium">{p.casualInterview.count}件</div>
                 <div className="text-xs text-slate-400">
                   書類選考通過者の{p.casualInterview.rateOfScreening}%
@@ -48,7 +70,7 @@ export default function PositionPipelineTable({ data }: { data: PositionPipeline
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-400">
-        ※カジュアル面談は実施しないポジションもあるため、メインのパイプライン（応募〜内定承諾）には含めず参考値として表示しています。
+        ※「→」の%は直前ステージからの遷移率です。カジュアル面談は実施しないポジションもあるため、メインのパイプラインには含めず参考値として表示しています。
       </p>
     </div>
   );

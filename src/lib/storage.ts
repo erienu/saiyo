@@ -3,6 +3,7 @@ import type { Applicant, HealthScoreConfig, PositionTarget } from '../types';
 const TARGETS_KEY = 'recruitment-dashboard:targets';
 const HEALTH_SCORE_CONFIGS_KEY = 'recruitment-dashboard:health-score-configs-by-position';
 const APPLICANTS_KEY = 'recruitment-dashboard:applicants';
+const CHANNEL_COSTS_KEY = 'recruitment-dashboard:channel-costs';
 
 // タイムゾーンによる日付のズレを避けるため、UTC変換せずローカル日付からYYYY-MM-DDを作る。
 function isoDate(d: Date): string {
@@ -98,4 +99,18 @@ export function saveApplicants(applicants: Applicant[]): void {
 
 export function clearApplicants(): void {
   localStorage.removeItem(APPLICANTS_KEY);
+}
+
+// チャネル別の概算コスト(手入力)。CSVにコスト列がない場合の採用単価計算に使う。
+export function loadChannelCosts(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(CHANNEL_COSTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveChannelCosts(costs: Record<string, number>): void {
+  localStorage.setItem(CHANNEL_COSTS_KEY, JSON.stringify(costs));
 }

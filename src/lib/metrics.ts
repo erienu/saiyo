@@ -21,13 +21,8 @@ export function getChannels(applicants: Applicant[]): string[] {
   return Array.from(new Set(applicants.map((a) => a.channel))).sort();
 }
 
-/** ステージ別人数（各ステージに到達した人数の累計／ファネル） */
-export function buildFunnel(applicants: Applicant[]): { stage: Stage; count: number }[] {
-  return STAGES.map((stage) => ({
-    stage,
-    count: applicants.filter((a) => a.stageDates[stage] !== null).length,
-  }));
-}
+// カジュアル面談は実施しないポジションもあるため、メインのパイプライン・リードタイム集計からは外し別管理する。
+export const MAIN_PIPELINE_STAGES: Stage[] = ['応募', '書類選考', '1次面接', '最終面接', '内定', '内定承諾'];
 
 export interface TargetProgress {
   position: string;
@@ -67,12 +62,12 @@ export interface LeadTimeStat {
   sampleSize: number;
 }
 
-/** 隣接ステージ間の平均リードタイム（日数） */
+/** 隣接ステージ間の平均リードタイム（日数）。カジュアル面談は除外したメインフローのみ対象。 */
 export function buildLeadTimes(applicants: Applicant[]): LeadTimeStat[] {
   const stats: LeadTimeStat[] = [];
-  for (let i = 0; i < STAGES.length - 1; i++) {
-    const from = STAGES[i];
-    const to = STAGES[i + 1];
+  for (let i = 0; i < MAIN_PIPELINE_STAGES.length - 1; i++) {
+    const from = MAIN_PIPELINE_STAGES[i];
+    const to = MAIN_PIPELINE_STAGES[i + 1];
     const diffs: number[] = [];
     for (const a of applicants) {
       const fromDate = a.stageDates[from];
@@ -115,14 +110,22 @@ export interface ChannelStat {
   costPerHire: number | null;
 }
 
-/** 流入経路（チャネル）別の応募数・通過率・コスト・採用単価 */
-export function buildChannelStats(applicants: Applicant[]): ChannelStat[] {
+/**
+ * 流入経路（チャネル）別の応募数・通過率・コスト・採用単価。
+ * `channelCosts`でチャネルごとの概算コスト(手入力)を渡すとそれを優先して使う。
+ * 未設定の場合はCSVのコスト列(applicant.cost)の合計を使う。
+ */
+export function buildChannelStats(
+  applicants: Applicant[],
+  channelCosts: Record<string, number> = {}
+): ChannelStat[] {
   const channels = getChannels(applicants);
   return channels
     .map((channel) => {
       const rows = applicants.filter((a) => a.channel === channel);
       const hired = rows.filter((a) => a.status === '内定承諾').length;
-      const totalCost = rows.reduce((s, a) => s + a.cost, 0);
+      const manualCost = channelCosts[channel];
+      const totalCost = manualCost !== undefined ? manualCost : rows.reduce((s, a) => s + a.cost, 0);
       return {
         channel,
         applicants: rows.length,
@@ -130,7 +133,7 @@ export function buildChannelStats(applicants: Applicant[]): ChannelStat[] {
         conversionRate:
           rows.length > 0 ? Math.round((hired / rows.length) * 1000) / 10 : 0,
         totalCost,
-        costPerHire: hired > 0 ? Math.round(totalCost / hired) : null,
+        costPerHire: hired > 0 && totalCost > 0 ? Math.round(totalCost / hired) : null,
       };
     })
     .sort((a, b) => b.applicants - a.applicants);
@@ -227,9 +230,6 @@ export interface PipelineStagePoint {
   transitionRate: number | null; // 直前ステージからの遷移率(%)
   overallRate: number; // 応募者数に対する到達率(%)
 }
-
-// カジュアル面談は実施しないポジションもあるため、メインのパイプラインからは外し別管理する。
-const MAIN_PIPELINE_STAGES: Stage[] = ['応募', '書類選考', '1次面接', '最終面接', '内定', '内定承諾'];
 
 export interface CasualInterviewStat {
   count: number;
