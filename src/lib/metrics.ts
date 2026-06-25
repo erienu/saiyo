@@ -1,0 +1,210 @@
+import type { Applicant, PositionTarget, Stage } from '../types';
+import { STAGES } from '../types';
+
+export function getPositions(applicants: Applicant[]): string[] {
+  return Array.from(new Set(applicants.map((a) => a.position))).sort();
+}
+
+export function getChannels(applicants: Applicant[]): string[] {
+  return Array.from(new Set(applicants.map((a) => a.channel))).sort();
+}
+
+/** ステージ別人数（各ステージに到達した人数の累計／ファネル） */
+export function buildFunnel(applicants: Applicant[]): { stage: Stage; count: number }[] {
+  return STAGES.map((stage) => ({
+    stage,
+    count: applicants.filter((a) => a.stageDates[stage] !== null).length,
+  }));
+}
+
+export interface TargetProgress {
+  position: string;
+  targetCount: number;
+  hiredCount: number;
+  achievementRate: number; // 0-100
+}
+
+export function buildTargetProgress(
+  applicants: Applicant[],
+  targets: PositionTarget[]
+): TargetProgress[] {
+  return targets.map((t) => {
+    const hiredCount = applicants.filter(
+      (a) => a.position === t.position && a.status === '内定承諾'
+    ).length;
+    return {
+      position: t.position,
+      targetCount: t.targetCount,
+      hiredCount,
+      achievementRate:
+        t.targetCount > 0 ? Math.round((hiredCount / t.targetCount) * 1000) / 10 : 0,
+    };
+  });
+}
+
+function daysBetween(a: string, b: string): number {
+  const d1 = new Date(a).getTime();
+  const d2 = new Date(b).getTime();
+  return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+export interface LeadTimeStat {
+  fromStage: Stage;
+  toStage: Stage;
+  avgDays: number | null;
+  sampleSize: number;
+}
+
+/** 隣接ステージ間の平均リードタイム（日数） */
+export function buildLeadTimes(applicants: Applicant[]): LeadTimeStat[] {
+  const stats: LeadTimeStat[] = [];
+  for (let i = 0; i < STAGES.length - 1; i++) {
+    const from = STAGES[i];
+    const to = STAGES[i + 1];
+    const diffs: number[] = [];
+    for (const a of applicants) {
+      const fromDate = a.stageDates[from];
+      const toDate = a.stageDates[to];
+      if (fromDate && toDate) {
+        diffs.push(daysBetween(fromDate, toDate));
+      }
+    }
+    stats.push({
+      fromStage: from,
+      toStage: to,
+      avgDays:
+        diffs.length > 0
+          ? Math.round((diffs.reduce((s, v) => s + v, 0) / diffs.length) * 10) / 10
+          : null,
+      sampleSize: diffs.length,
+    });
+  }
+  return stats;
+}
+
+/** 応募から内定承諾までの平均リードタイム（日数） */
+export function buildOverallLeadTime(applicants: Applicant[]): number | null {
+  const diffs: number[] = [];
+  for (const a of applicants) {
+    if (a.stageDates['応募'] && a.stageDates['内定承諾']) {
+      diffs.push(daysBetween(a.stageDates['応募']!, a.stageDates['内定承諾']!));
+    }
+  }
+  if (diffs.length === 0) return null;
+  return Math.round((diffs.reduce((s, v) => s + v, 0) / diffs.length) * 10) / 10;
+}
+
+export interface ChannelStat {
+  channel: string;
+  applicants: number;
+  hired: number;
+  conversionRate: number; // %
+  totalCost: number;
+  costPerHire: number | null;
+}
+
+/** 流入経路（チャネル）別の応募数・通過率・コスト・採用単価 */
+export function buildChannelStats(applicants: Applicant[]): ChannelStat[] {
+  const channels = getChannels(applicants);
+  return channels
+    .map((channel) => {
+      const rows = applicants.filter((a) => a.channel === channel);
+      const hired = rows.filter((a) => a.status === '内定承諾').length;
+      const totalCost = rows.reduce((s, a) => s + a.cost, 0);
+      return {
+        channel,
+        applicants: rows.length,
+        hired,
+        conversionRate:
+          rows.length > 0 ? Math.round((hired / rows.length) * 1000) / 10 : 0,
+        totalCost,
+        costPerHire: hired > 0 ? Math.round(totalCost / hired) : null,
+      };
+    })
+    .sort((a, b) => b.applicants - a.applicants);
+}
+
+export interface InterviewerStat {
+  interviewer: string;
+  stage: Stage;
+  count: number;
+  avgScore: number | null;
+  passRate: number; // %
+}
+
+/** 面接官の甘辛分析: 同ステージ全体平均と比較できるよう全行を返す */
+export function buildInterviewerStats(applicants: Applicant[]): {
+  rows: InterviewerStat[];
+  stageAverages: Record<string, { avgScore: number | null; passRate: number }>;
+} {
+  const byKey = new Map<string, InterviewRecordWithKey[]>();
+
+  interface InterviewRecordWithKey {
+    interviewer: string;
+    stage: Stage;
+    score: number | null;
+    result: '通過' | '不通過' | null;
+  }
+
+  for (const a of applicants) {
+    for (const iv of a.interviews) {
+      if (!iv.interviewer) continue;
+      const key = `${iv.interviewer}__${iv.stage}`;
+      const list = byKey.get(key) ?? [];
+      list.push({ interviewer: iv.interviewer, stage: iv.stage, score: iv.score, result: iv.result });
+      byKey.set(key, list);
+    }
+  }
+
+  const rows: InterviewerStat[] = Array.from(byKey.entries()).map(([, list]) => {
+    const scores = list.map((l) => l.score).filter((s): s is number => s !== null);
+    const passed = list.filter((l) => l.result === '通過').length;
+    return {
+      interviewer: list[0].interviewer,
+      stage: list[0].stage,
+      count: list.length,
+      avgScore:
+        scores.length > 0
+          ? Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 100) / 100
+          : null,
+      passRate: list.length > 0 ? Math.round((passed / list.length) * 1000) / 10 : 0,
+    };
+  });
+
+  const stageAverages: Record<string, { avgScore: number | null; passRate: number }> = {};
+  for (const stage of STAGES) {
+    const stageRows = rows.filter((r) => r.stage === stage);
+    const allScores = stageRows
+      .filter((r) => r.avgScore !== null)
+      .flatMap((r) => Array(r.count).fill(r.avgScore as number));
+    const totalCount = stageRows.reduce((s, r) => s + r.count, 0);
+    const totalPassed = stageRows.reduce((s, r) => s + (r.passRate / 100) * r.count, 0);
+    stageAverages[stage] = {
+      avgScore:
+        allScores.length > 0
+          ? Math.round((allScores.reduce((s, v) => s + v, 0) / allScores.length) * 100) / 100
+          : null,
+      passRate: totalCount > 0 ? Math.round((totalPassed / totalCount) * 1000) / 10 : 0,
+    };
+  }
+
+  return { rows: rows.sort((a, b) => a.stage.localeCompare(b.stage) || a.interviewer.localeCompare(b.interviewer)), stageAverages };
+}
+
+export interface MonthlyTrendPoint {
+  month: string; // YYYY-MM
+  applicants: number;
+}
+
+/** 月別応募数推移 */
+export function buildMonthlyTrend(applicants: Applicant[]): MonthlyTrendPoint[] {
+  const counts = new Map<string, number>();
+  for (const a of applicants) {
+    if (!a.appliedDate) continue;
+    const month = a.appliedDate.slice(0, 7);
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, applicants]) => ({ month, applicants }));
+}
