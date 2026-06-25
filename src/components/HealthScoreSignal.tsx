@@ -7,9 +7,11 @@ const SIGNAL_STYLE: Record<HealthScoreResult['signal'], { bg: string; ring: stri
 };
 
 export default function HealthScoreSignal({
+  position,
   health,
   advice,
 }: {
+  position: string;
   health: HealthScoreResult;
   advice: string[];
 }) {
@@ -22,7 +24,7 @@ export default function HealthScoreSignal({
           <span className="text-3xl leading-none">{health.periodDefined ? style.emoji : '⚪'}</span>
           <div>
             <p className="text-sm font-semibold text-slate-700">
-              最重要ヘルススコア：1次面接・カジュアル面談 設定率
+              {position}：最重要ヘルススコア（1次面接・カジュアル面談 設定率）
             </p>
             <p className="text-xs text-slate-500">
               {health.periodDefined

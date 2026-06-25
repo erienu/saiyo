@@ -3,8 +3,10 @@ import { computeFunnelForecast } from '../lib/metrics';
 import type { HealthScoreConfig, PipelineRates } from '../types';
 
 interface Props {
+  position: string;
   config: HealthScoreConfig;
   onChange: (config: HealthScoreConfig) => void;
+  defaultOpen?: boolean;
 }
 
 const RATE_FIELDS: { key: keyof PipelineRates; label: string }[] = [
@@ -15,8 +17,8 @@ const RATE_FIELDS: { key: keyof PipelineRates; label: string }[] = [
   { key: 'offerToAccept', label: '内定 → 内定承諾' },
 ];
 
-export default function KpiSettings({ config, onChange }: Props) {
-  const [open, setOpen] = useState(false);
+export default function KpiSettings({ position, config, onChange, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
   const forecast = computeFunnelForecast(config);
 
   const updateRate = (key: keyof PipelineRates, value: number) => {
@@ -29,7 +31,7 @@ export default function KpiSettings({ config, onChange }: Props) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
       >
-        <span>KPI設定（面談設定率ヘルススコア）</span>
+        <span>KPI設定（{position}・面談設定率ヘルススコア）</span>
         <span className="text-xs text-slate-400">{open ? '閉じる' : '開く'}</span>
       </button>
       {open && (

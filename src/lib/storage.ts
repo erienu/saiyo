@@ -1,7 +1,7 @@
 import type { Applicant, HealthScoreConfig, PositionTarget } from '../types';
 
 const TARGETS_KEY = 'recruitment-dashboard:targets';
-const HEALTH_SCORE_CONFIG_KEY = 'recruitment-dashboard:health-score-config';
+const HEALTH_SCORE_CONFIGS_KEY = 'recruitment-dashboard:health-score-configs-by-position';
 const APPLICANTS_KEY = 'recruitment-dashboard:applicants';
 
 // タイムゾーンによる日付のズレを避けるため、UTC変換せずローカル日付からYYYY-MM-DDを作る。
@@ -50,20 +50,31 @@ export function saveTargets(targets: PositionTarget[]): void {
   localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
 }
 
-export function loadHealthScoreConfig(): HealthScoreConfig {
-  const fallback = getDefaultHealthScoreConfig();
+export type HealthScoreConfigsByPosition = Record<string, HealthScoreConfig>;
+
+/** ポジション別のKPI設定一式を読み込む。 */
+export function loadHealthScoreConfigs(): HealthScoreConfigsByPosition {
   try {
-    const raw = localStorage.getItem(HEALTH_SCORE_CONFIG_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    return { ...fallback, ...parsed, rates: { ...fallback.rates, ...parsed.rates } };
+    const raw = localStorage.getItem(HEALTH_SCORE_CONFIGS_KEY);
+    return raw ? JSON.parse(raw) : {};
   } catch {
-    return fallback;
+    return {};
   }
 }
 
-export function saveHealthScoreConfig(config: HealthScoreConfig): void {
-  localStorage.setItem(HEALTH_SCORE_CONFIG_KEY, JSON.stringify(config));
+export function saveHealthScoreConfigs(configs: HealthScoreConfigsByPosition): void {
+  localStorage.setItem(HEALTH_SCORE_CONFIGS_KEY, JSON.stringify(configs));
+}
+
+/** 指定ポジションの設定を返す。未設定の場合はデフォルト値。 */
+export function getHealthScoreConfigForPosition(
+  configs: HealthScoreConfigsByPosition,
+  position: string
+): HealthScoreConfig {
+  const fallback = getDefaultHealthScoreConfig();
+  const saved = configs[position];
+  if (!saved) return fallback;
+  return { ...fallback, ...saved, rates: { ...fallback.rates, ...saved.rates } };
 }
 
 // 取り込んだ応募者データもブラウザのlocalStorageに保存し、再読み込み後も表示されるようにする。

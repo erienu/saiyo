@@ -31,12 +31,14 @@ import {
 } from './lib/metrics';
 import {
   clearApplicants,
+  getHealthScoreConfigForPosition,
   loadApplicants,
-  loadHealthScoreConfig,
+  loadHealthScoreConfigs,
   loadTargets,
   saveApplicants,
-  saveHealthScoreConfig,
+  saveHealthScoreConfigs,
   saveTargets,
+  type HealthScoreConfigsByPosition,
 } from './lib/storage';
 import type { Applicant, DateRange, HealthScoreConfig, PositionTarget } from './types';
 
@@ -44,8 +46,8 @@ function App() {
   const [applicants, setApplicants] = useState<Applicant[]>(() => loadApplicants());
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [targets, setTargets] = useState<PositionTarget[]>(loadTargets());
-  const [healthScoreConfig, setHealthScoreConfig] = useState<HealthScoreConfig>(
-    loadHealthScoreConfig()
+  const [healthScoreConfigs, setHealthScoreConfigs] = useState<HealthScoreConfigsByPosition>(
+    loadHealthScoreConfigs()
   );
   const [selectedPosition, setSelectedPosition] = useState<string>('全ポジション');
   const [period, setPeriod] = useState<DateRange>(() => currentMonthRange());
@@ -62,25 +64,6 @@ function App() {
     [periodFiltered, selectedPosition]
   );
 
-  // ヘルススコアはKPI設定で指定した独自の期間を使う(ページ上部の期間フィルターとは独立)。
-  const positionFilteredAll = useMemo(
-    () =>
-      selectedPosition === '全ポジション'
-        ? applicants
-        : applicants.filter((a) => a.position === selectedPosition),
-    [applicants, selectedPosition]
-  );
-  const healthScope = useMemo(
-    () =>
-      healthScoreConfig.periodStart && healthScoreConfig.periodEnd
-        ? filterByPeriod(positionFilteredAll, {
-            start: healthScoreConfig.periodStart,
-            end: healthScoreConfig.periodEnd,
-          })
-        : positionFilteredAll,
-    [positionFilteredAll, healthScoreConfig]
-  );
-
   const funnel = useMemo(() => buildFunnel(filtered), [filtered]);
   const targetProgress = useMemo(() => buildTargetProgress(applicants, targets), [applicants, targets]);
   const leadTimes = useMemo(() => buildLeadTimes(filtered), [filtered]);
@@ -92,15 +75,26 @@ function App() {
   );
   const monthlyTrend = useMemo(() => buildMonthlyTrend(filtered), [filtered]);
   const positionPipelines = useMemo(() => buildPositionPipelines(filtered), [filtered]);
-  const healthScore = useMemo(
-    () => buildHealthScore(positionFilteredAll, healthScoreConfig),
-    [positionFilteredAll, healthScoreConfig]
-  );
-  const healthLeadTimes = useMemo(() => buildLeadTimes(healthScope), [healthScope]);
-  const healthChannelStats = useMemo(() => buildChannelStats(healthScope), [healthScope]);
-  const healthAdvice = useMemo(
-    () => generateHealthScoreAdvice(healthScore, healthLeadTimes, healthChannelStats),
-    [healthScore, healthLeadTimes, healthChannelStats]
+
+  // KPI設定・ヘルススコアはポジションごとに独立した目標値・期間・遷移率を持つ(ページ上部の期間フィルターとは独立)。
+  const healthScoreByPosition = useMemo(
+    () =>
+      positions.map((position) => {
+        const config = getHealthScoreConfigForPosition(healthScoreConfigs, position);
+        const positionApplicants = applicants.filter((a) => a.position === position);
+        const health = buildHealthScore(positionApplicants, config);
+        const scope =
+          config.periodStart && config.periodEnd
+            ? filterByPeriod(positionApplicants, { start: config.periodStart, end: config.periodEnd })
+            : positionApplicants;
+        const advice = generateHealthScoreAdvice(
+          health,
+          buildLeadTimes(scope),
+          buildChannelStats(scope)
+        );
+        return { position, config, health, advice };
+      }),
+    [positions, applicants, healthScoreConfigs]
   );
 
   const hiredCount = filtered.filter((a) => a.status === '内定承諾').length;
@@ -126,9 +120,10 @@ function App() {
     saveTargets(next);
   };
 
-  const handleHealthScoreConfigChange = (next: HealthScoreConfig) => {
-    setHealthScoreConfig(next);
-    saveHealthScoreConfig(next);
+  const handleHealthScoreConfigChange = (position: string, next: HealthScoreConfig) => {
+    const updated = { ...healthScoreConfigs, [position]: next };
+    setHealthScoreConfigs(updated);
+    saveHealthScoreConfigs(updated);
   };
 
   return (
@@ -160,8 +155,27 @@ function App() {
 
             <PeriodFilter range={period} onChange={setPeriod} />
 
-            <KpiSettings config={healthScoreConfig} onChange={handleHealthScoreConfigChange} />
-            <HealthScoreSignal health={healthScore} advice={healthAdvice} />
+            <Section
+              title="KPI設定（ポジション別・面談設定率ヘルススコア）"
+              description="ポジションごとに目標採用人数・期間・各区間の遷移率を設定します"
+            >
+              <div className="space-y-3">
+                {positions.map((position) => (
+                  <KpiSettings
+                    key={position}
+                    position={position}
+                    config={getHealthScoreConfigForPosition(healthScoreConfigs, position)}
+                    onChange={(next) => handleHealthScoreConfigChange(position, next)}
+                  />
+                ))}
+              </div>
+            </Section>
+
+            <div className="space-y-3">
+              {healthScoreByPosition.map(({ position, health, advice }) => (
+                <HealthScoreSignal key={position} position={position} health={health} advice={advice} />
+              ))}
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-slate-500">ポジション:</span>
