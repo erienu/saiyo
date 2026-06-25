@@ -16,7 +16,7 @@ export default function LeadTimeChart({ data }: { data: LeadTimeStat[] }) {
           <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
           <YAxis allowDecimals={false} tick={{ fontSize: 12 }} unit="日" />
           <Tooltip
-            formatter={(value: number, _name, props) => [
+            formatter={(value, _name, props) => [
               `${value}日 (n=${props.payload.sampleSize})`,
               '平均リードタイム',
             ]}
