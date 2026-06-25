@@ -77,6 +77,99 @@ export function rowToApplicant(row: Record<string, string>): Applicant {
   };
 }
 
+const HRMOS_DATE_RE = /^(\d{4})年(\d{1,2})月(\d{1,2})日/;
+
+function hrmosToIso(s: string | undefined): string {
+  const t = (s ?? '').trim();
+  if (!t) return '';
+  const m = HRMOS_DATE_RE.exec(t);
+  if (!m) return t;
+  const [, y, mo, d] = m;
+  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
+const HRMOS_STATUS_MAP: Record<string, Status> = {
+  入社: '内定承諾',
+  内定: '進行中',
+  選考中: '進行中',
+  新着応募: '進行中',
+  不合格: '離脱',
+  辞退: '離脱',
+  重複応募: '離脱',
+};
+
+const HRMOS_STEP_STAGE: Record<string, Stage> = {
+  カジュアル面談: 'カジュアル面談',
+  '1次面接': '1次面接',
+  最終面接: '最終面接',
+};
+
+// HRMOS(採用管理システム)の生エクスポートを直接読み取る。
+// 個人情報列(氏名相当・生年月日・性別・郵便番号・住所・レジュメ本文・学歴・職歴など)は
+// 明示的にアクセスしないため、アプリ内に取り込まれない。
+function hrmosRowToApplicant(row: Record<string, string>): Applicant | null {
+  const id = (row['応募ID'] ?? '').trim();
+  if (!id) return null;
+
+  const appliedDate = hrmosToIso(row['応募日']);
+  const senkoStatus = (row['選考ステータス'] ?? '').trim();
+  const status: Status = HRMOS_STATUS_MAP[senkoStatus] ?? '進行中';
+
+  const stageDates: Record<Stage, string | null> = {
+    応募: emptyToNull(appliedDate),
+    書類選考: emptyToNull(hrmosToIso(row['1次ステップ実施日'])),
+    カジュアル面談: null,
+    '1次面接': null,
+    最終面接: null,
+    内定: emptyToNull(hrmosToIso(row['内定日'])),
+    内定承諾: emptyToNull(hrmosToIso(row['内定承諾日'])),
+  };
+
+  const interviews: InterviewRecord[] = [];
+  for (let n = 2; n <= 10; n++) {
+    const stepName = (row[`${n}次ステップ`] ?? '').trim();
+    const stage = HRMOS_STEP_STAGE[stepName];
+    if (!stage) continue;
+    const date = emptyToNull(hrmosToIso(row[`${n}次ステップ実施日`]));
+    const result = parseResult(row[`${n}次ステップステータス`]);
+    stageDates[stage] = date;
+    interviews.push({ stage, date, interviewer: null, score: null, result });
+  }
+
+  let currentStage: Stage = '応募';
+  if (senkoStatus === '入社') currentStage = '内定承諾';
+  else if (senkoStatus === '内定') currentStage = '内定';
+  else {
+    for (const s of STAGES) {
+      if (stageDates[s]) currentStage = s;
+    }
+  }
+
+  const isDropped = status === '離脱';
+  const dropoutDateRaw = row['辞退日'] || row['不合格・重複終了日'];
+  const reasonCategory = (row['辞退理由（分類）'] ?? '').trim();
+  const reasonDetail = (row['辞退理由（詳細）'] ?? '').trim();
+  const dropoutReason = reasonCategory
+    ? reasonDetail
+      ? `${reasonCategory}：${reasonDetail}`
+      : reasonCategory
+    : null;
+
+  return {
+    id,
+    position: emptyToNull(row['選考ポジション名']) ?? '未分類',
+    appliedDate,
+    channel: emptyToNull(row['応募経路']) ?? '不明',
+    cost: 0,
+    currentStage,
+    status,
+    dropoutDate: isDropped ? emptyToNull(hrmosToIso(dropoutDateRaw)) : null,
+    dropoutReason: isDropped ? dropoutReason : null,
+    stageDates,
+    interviews,
+  };
+}
+
 export function parseApplicantsCsv(
   text: string
 ): { applicants: Applicant[]; errors: string[] } {
@@ -89,9 +182,16 @@ export function parseApplicantsCsv(
     (e) => `行${e.row ?? '?'}: ${e.message}`
   );
 
-  const applicants = result.data
-    .filter((row) => row['応募者ID'] && row['応募者ID'].trim() !== '')
-    .map(rowToApplicant);
+  const fields = result.meta.fields ?? [];
+  const isHrmosExport = fields.includes('応募ID') && fields.includes('選考ステータス');
+
+  const applicants = isHrmosExport
+    ? result.data
+        .map(hrmosRowToApplicant)
+        .filter((a): a is Applicant => a !== null)
+    : result.data
+        .filter((row) => row['応募者ID'] && row['応募者ID'].trim() !== '')
+        .map(rowToApplicant);
 
   return { applicants, errors };
 }

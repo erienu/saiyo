@@ -11,8 +11,24 @@ export default function FileUpload({ onLoad, errors, count }: Props) {
 
   const handleFile = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => onLoad(String(reader.result ?? ''));
-    reader.readAsText(file, 'utf-8');
+    reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer;
+      const bytes = new Uint8Array(buffer);
+      let encoding = 'utf-8';
+      let offset = 0;
+      if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+        encoding = 'utf-16le';
+        offset = 2;
+      } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+        encoding = 'utf-16be';
+        offset = 2;
+      } else if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+        offset = 3;
+      }
+      const text = new TextDecoder(encoding).decode(bytes.slice(offset));
+      onLoad(text);
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -21,7 +37,7 @@ export default function FileUpload({ onLoad, errors, count }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-slate-700">応募者データ（CSV）</h2>
           <p className="text-xs text-slate-500">
-            応募者ごとに1行、ステージ日付・面接官評価を列で持つCSVを取り込みます。
+            このダッシュボード用CSV、またはHRMOSの応募者情報エクスポートをそのまま取り込めます。
           </p>
         </div>
         <div className="flex items-center gap-2">
