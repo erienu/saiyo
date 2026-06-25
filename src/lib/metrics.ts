@@ -253,36 +253,74 @@ export function buildPositionPipelines(applicants: Applicant[]): PositionPipelin
   });
 }
 
+export interface FunnelForecast {
+  requiredApply: number;
+  requiredScreening: number;
+  requiredInterview: number; // 面談設定(カジュアル面談/1次面接)の必要件数
+  requiredFinal: number;
+  requiredOffer: number;
+  targetHireCount: number;
+}
+
+function toFraction(percent: number): number {
+  return Math.max(percent, 0.01) / 100;
+}
+
+/** 目標採用人数と各区間の遷移率から、逆算で各ステージに必要な件数を算出する */
+export function computeFunnelForecast(config: HealthScoreConfig): FunnelForecast {
+  const { targetHireCount, rates } = config;
+  const requiredOffer = targetHireCount / toFraction(rates.offerToAccept);
+  const requiredFinal = requiredOffer / toFraction(rates.finalToOffer);
+  const requiredInterview = requiredFinal / toFraction(rates.interviewToFinal);
+  const requiredScreening = requiredInterview / toFraction(rates.screeningToInterview);
+  const requiredApply = requiredScreening / toFraction(rates.applyToScreening);
+  return {
+    requiredApply: Math.ceil(requiredApply),
+    requiredScreening: Math.ceil(requiredScreening),
+    requiredInterview: Math.ceil(requiredInterview),
+    requiredFinal: Math.ceil(requiredFinal),
+    requiredOffer: Math.ceil(requiredOffer),
+    targetHireCount,
+  };
+}
+
 export interface HealthScoreResult {
   actualCount: number;
-  targetCount: number;
+  targetCount: number; // 逆算された面談設定の必要件数
   elapsedPercent: number; // 期間の経過率(%)
   expectedByNow: number;
   achievementRate: number | null; // expectedByNowに対する達成率(%)。目標未設定/期間未指定ならnull
   signal: SignalColor;
   periodDefined: boolean; // 開始日・終了日が両方指定されているか
+  forecast: FunnelForecast;
 }
 
 /**
  * 「1次面接 or カジュアル面談 設定率」ヘルススコア。
- * 期間内の経過日数に応じた目標(ペース)に対して、実際に設定できた件数の達成率を信号で示す。
+ * 目標採用人数・期間・各区間の遷移率から逆算した「期間内に必要な面談設定件数」を目標とし、
+ * 経過日数に応じたペースに対する実際の設定件数の達成率を信号で示す。
  */
 export function buildHealthScore(
-  periodApplicants: Applicant[],
-  range: DateRange,
+  applicants: Applicant[],
   config: HealthScoreConfig,
   today: Date = new Date()
 ): HealthScoreResult {
+  const periodDefined = Boolean(config.periodStart && config.periodEnd);
+  const periodApplicants = periodDefined
+    ? filterByPeriod(applicants, { start: config.periodStart, end: config.periodEnd })
+    : applicants;
+
   const actualCount = periodApplicants.filter(
     (a) => a.stageDates['カジュアル面談'] !== null || a.stageDates['1次面接'] !== null
   ).length;
 
-  const periodDefined = Boolean(range.start && range.end);
+  const forecast = computeFunnelForecast(config);
+  const targetCount = forecast.requiredInterview;
 
   let elapsedPercent = 0;
-  if (range.start && range.end) {
-    const startMs = new Date(range.start).getTime();
-    const endMs = new Date(range.end).getTime();
+  if (config.periodStart && config.periodEnd) {
+    const startMs = new Date(config.periodStart).getTime();
+    const endMs = new Date(config.periodEnd).getTime();
     const nowMs = today.getTime();
     if (endMs > startMs) {
       elapsedPercent = Math.round(
@@ -291,11 +329,9 @@ export function buildHealthScore(
     }
   }
 
-  const expectedByNow = periodDefined
-    ? Math.round(config.intervalTargetCount * (elapsedPercent / 100) * 10) / 10
-    : 0;
+  const expectedByNow = periodDefined ? Math.round(targetCount * (elapsedPercent / 100) * 10) / 10 : 0;
   const achievementRate =
-    periodDefined && config.intervalTargetCount > 0
+    periodDefined && targetCount > 0
       ? expectedByNow > 0
         ? Math.round((actualCount / expectedByNow) * 1000) / 10
         : 100
@@ -313,10 +349,11 @@ export function buildHealthScore(
   return {
     periodDefined,
     actualCount,
-    targetCount: config.intervalTargetCount,
+    targetCount,
     elapsedPercent,
     expectedByNow,
     achievementRate,
     signal,
+    forecast,
   };
 }

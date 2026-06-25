@@ -26,8 +26,8 @@ export default function HealthScoreSignal({
             </p>
             <p className="text-xs text-slate-500">
               {health.periodDefined
-                ? `${style.label}・経過${health.elapsedPercent}%時点で目標ペース${health.expectedByNow}件中${health.actualCount}件設定済み`
-                : '期間（開始日・終了日）を指定するとペースに対する達成率が表示されます。'}
+                ? `${style.label}・逆算目標${health.targetCount}件中、経過${health.elapsedPercent}%時点でのペース目標${health.expectedByNow}件に対し${health.actualCount}件設定済み`
+                : 'KPI設定で目標採用人数と期間を指定するとペースに対する達成率が表示されます。'}
             </p>
           </div>
         </div>

@@ -3,11 +3,38 @@ import type { HealthScoreConfig, PositionTarget } from '../types';
 const TARGETS_KEY = 'recruitment-dashboard:targets';
 const HEALTH_SCORE_CONFIG_KEY = 'recruitment-dashboard:health-score-config';
 
-export const DEFAULT_HEALTH_SCORE_CONFIG: HealthScoreConfig = {
-  intervalTargetCount: 10,
-  redBelowPercent: 50,
-  yellowBelowPercent: 80,
-};
+// タイムゾーンによる日付のズレを避けるため、UTC変換せずローカル日付からYYYY-MM-DDを作る。
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function currentMonthIsoRange(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { start: isoDate(start), end: isoDate(end) };
+}
+
+export function getDefaultHealthScoreConfig(): HealthScoreConfig {
+  const { start, end } = currentMonthIsoRange();
+  return {
+    targetHireCount: 5,
+    periodStart: start,
+    periodEnd: end,
+    rates: {
+      applyToScreening: 70,
+      screeningToInterview: 50,
+      interviewToFinal: 70,
+      finalToOffer: 80,
+      offerToAccept: 90,
+    },
+    redBelowPercent: 50,
+    yellowBelowPercent: 80,
+  };
+}
 
 export function loadTargets(): PositionTarget[] {
   try {
@@ -23,11 +50,14 @@ export function saveTargets(targets: PositionTarget[]): void {
 }
 
 export function loadHealthScoreConfig(): HealthScoreConfig {
+  const fallback = getDefaultHealthScoreConfig();
   try {
     const raw = localStorage.getItem(HEALTH_SCORE_CONFIG_KEY);
-    return raw ? { ...DEFAULT_HEALTH_SCORE_CONFIG, ...JSON.parse(raw) } : DEFAULT_HEALTH_SCORE_CONFIG;
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return { ...fallback, ...parsed, rates: { ...fallback.rates, ...parsed.rates } };
   } catch {
-    return DEFAULT_HEALTH_SCORE_CONFIG;
+    return fallback;
   }
 }
 

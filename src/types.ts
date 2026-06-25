@@ -47,10 +47,22 @@ export interface DateRange {
   end: string | null; // YYYY-MM-DD
 }
 
+// 採用ファネル各区間の遷移率(%)。カジュアル面談・1次面接は「面談設定」として1区間にまとめる。
+export interface PipelineRates {
+  applyToScreening: number; // 応募 → 書類選考
+  screeningToInterview: number; // 書類選考 → 面談設定(カジュアル面談/1次面接)
+  interviewToFinal: number; // 面談設定 → 最終面接
+  finalToOffer: number; // 最終面接 → 内定
+  offerToAccept: number; // 内定 → 内定承諾
+}
+
 // 「1次面接 or カジュアル面談 設定率」ヘルススコアのKPI設定。
-// 期間内に設定すべき面談件数の目標と、経過日数に対する達成率のしきい値(赤/黄/緑)。
+// 目標採用人数・期間・各区間の遷移率から、期間内に設定すべき面談件数を逆算する。
 export interface HealthScoreConfig {
-  intervalTargetCount: number;
+  targetHireCount: number;
+  periodStart: string | null; // YYYY-MM-DD
+  periodEnd: string | null; // YYYY-MM-DD
+  rates: PipelineRates;
   redBelowPercent: number; // この%未満は赤
   yellowBelowPercent: number; // この%未満(赤以上)は黄、以上は緑
 }

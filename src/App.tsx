@@ -59,6 +59,25 @@ function App() {
     [periodFiltered, selectedPosition]
   );
 
+  // ヘルススコアはKPI設定で指定した独自の期間を使う(ページ上部の期間フィルターとは独立)。
+  const positionFilteredAll = useMemo(
+    () =>
+      selectedPosition === '全ポジション'
+        ? applicants
+        : applicants.filter((a) => a.position === selectedPosition),
+    [applicants, selectedPosition]
+  );
+  const healthScope = useMemo(
+    () =>
+      healthScoreConfig.periodStart && healthScoreConfig.periodEnd
+        ? filterByPeriod(positionFilteredAll, {
+            start: healthScoreConfig.periodStart,
+            end: healthScoreConfig.periodEnd,
+          })
+        : positionFilteredAll,
+    [positionFilteredAll, healthScoreConfig]
+  );
+
   const funnel = useMemo(() => buildFunnel(filtered), [filtered]);
   const targetProgress = useMemo(() => buildTargetProgress(applicants, targets), [applicants, targets]);
   const leadTimes = useMemo(() => buildLeadTimes(filtered), [filtered]);
@@ -71,12 +90,14 @@ function App() {
   const monthlyTrend = useMemo(() => buildMonthlyTrend(filtered), [filtered]);
   const positionPipelines = useMemo(() => buildPositionPipelines(filtered), [filtered]);
   const healthScore = useMemo(
-    () => buildHealthScore(filtered, period, healthScoreConfig),
-    [filtered, period, healthScoreConfig]
+    () => buildHealthScore(positionFilteredAll, healthScoreConfig),
+    [positionFilteredAll, healthScoreConfig]
   );
+  const healthLeadTimes = useMemo(() => buildLeadTimes(healthScope), [healthScope]);
+  const healthChannelStats = useMemo(() => buildChannelStats(healthScope), [healthScope]);
   const healthAdvice = useMemo(
-    () => generateHealthScoreAdvice(healthScore, leadTimes, channelStats),
-    [healthScore, leadTimes, channelStats]
+    () => generateHealthScoreAdvice(healthScore, healthLeadTimes, healthChannelStats),
+    [healthScore, healthLeadTimes, healthChannelStats]
   );
 
   const hiredCount = filtered.filter((a) => a.status === '内定承諾').length;
