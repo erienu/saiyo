@@ -286,22 +286,6 @@ function App() {
 
             <PeriodFilter range={period} onChange={setPeriod} />
 
-            <Section
-              title="KPI設定（ポジション別・面談設定率ヘルススコア）"
-              description="ポジションごとに目標採用人数・期間・各区間の遷移率を設定します"
-            >
-              <div className="space-y-3">
-                {positions.map((position) => (
-                  <KpiSettings
-                    key={position}
-                    position={position}
-                    config={getHealthScoreConfigForPosition(healthScoreConfigs, position)}
-                    onChange={(next) => handleHealthScoreConfigChange(position, next)}
-                  />
-                ))}
-              </div>
-            </Section>
-
             <div className="space-y-3">
               {healthScoreByPosition.map(({ position, health, advice }) => (
                 <HealthScoreSignal key={position} position={position} health={health} advice={advice} />
@@ -380,6 +364,20 @@ function App() {
             >
               <InterviewerTable rows={interviewerRows} stageAverages={stageAverages} />
             </Section>
+
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400">
+                以下はヘルススコアの計算に使う詳細設定です。通常は変更不要です。
+              </p>
+              {positions.map((position) => (
+                <KpiSettings
+                  key={position}
+                  position={position}
+                  config={getHealthScoreConfigForPosition(healthScoreConfigs, position)}
+                  onChange={(next) => handleHealthScoreConfigChange(position, next)}
+                />
+              ))}
+            </div>
           </>
         )}
       </main>
