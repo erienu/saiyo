@@ -15,6 +15,8 @@ import HealthScoreSignal from './components/HealthScoreSignal';
 import KpiSettings from './components/KpiSettings';
 import PeriodFilter, { currentMonthRange } from './components/PeriodFilter';
 import PositionPipelineTable from './components/PositionPipelineTable';
+import Tabs from './components/Tabs';
+import SettingsModal from './components/SettingsModal';
 import { parseApplicantsCsv } from './lib/csv';
 import { generateHealthScoreAdvice } from './lib/advice';
 import {
@@ -48,6 +50,13 @@ import type { Applicant, DateRange, HealthScoreConfig, PositionTarget } from './
 
 const PASSWORD_KEY = 'recruitment-dashboard:password';
 
+type TabId = 'pipeline' | 'channel' | 'interviewer';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'pipeline', label: 'パイプライン分析' },
+  { id: 'channel', label: '流入経路分析' },
+  { id: 'interviewer', label: '面接官分析' },
+];
+
 function App() {
   const [applicants, setApplicants] = useState<Applicant[]>(() => loadApplicants());
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
@@ -58,6 +67,8 @@ function App() {
   const [channelCosts, setChannelCosts] = useState<Record<string, number>>(loadChannelCosts());
   const [selectedPosition, setSelectedPosition] = useState<string>('全ポジション');
   const [period, setPeriod] = useState<DateRange>(() => currentMonthRange());
+  const [activeTab, setActiveTab] = useState<TabId>('pipeline');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [authStatus, setAuthStatus] = useState<'checking' | 'locked' | 'unlocked'>('checking');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -252,16 +263,26 @@ function App() {
                 経営・現場マネージャー向け：ポジション別の採用進捗を可視化します
               </p>
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem(PASSWORD_KEY);
-                passwordRef.current = null;
-                setAuthStatus('locked');
-              }}
-              className="text-xs text-slate-400 hover:text-slate-600"
-            >
-              ロック
-            </button>
+            <div className="flex items-center gap-3">
+              {applicants.length > 0 && (
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  ⚙ 設定
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  localStorage.removeItem(PASSWORD_KEY);
+                  passwordRef.current = null;
+                  setAuthStatus('locked');
+                }}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                ロック
+              </button>
+            </div>
           </div>
           {syncError && <p className="mt-1 text-xs text-amber-600">{syncError}</p>}
         </div>
@@ -281,9 +302,8 @@ function App() {
           </div>
         ) : (
           <>
+            {/* 常に見える概要エリア：採用進捗・ヘルススコア・基本KPI */}
             <HiringSummaryHero data={targetProgress} />
-
-            <PeriodFilter range={period} onChange={setPeriod} />
 
             <div className="space-y-3">
               {healthScoreByPosition.map(({ position, health, advice }) => (
@@ -291,21 +311,26 @@ function App() {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">ポジション:</span>
-              {['全ポジション', ...positions].map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setSelectedPosition(p)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    selectedPosition === p
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500">ポジション:</span>
+                  {['全ポジション', ...positions].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setSelectedPosition(p)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        selectedPosition === p
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <PeriodFilter range={period} onChange={setPeriod} />
+              </div>
             </div>
 
             <KpiCards
@@ -320,65 +345,82 @@ function App() {
               ]}
             />
 
-            <TargetSettings positions={positions} targets={targets} onChange={handleTargetsChange} />
-
-            <Section
-              title="ポジション別パイプライン（応募〜内定承諾）"
-              description="各ステージの人数・直前ステージからの遷移率・応募者全体に対する到達率"
-            >
-              <PositionPipelineTable data={positionPipelines} />
-            </Section>
-
-            <Section title="月別応募数推移">
-              <MonthlyTrendChart data={monthlyTrend} />
-            </Section>
-
-            <Section
-              title="選考スピード（リードタイム）"
-              description="隣接ステージ間の平均通過日数（カジュアル面談は除く）"
-            >
-              <LeadTimeChart data={leadTimes} />
-            </Section>
-
-            <ChannelCostSettings
-              channels={channels}
-              costs={channelCosts}
-              onChange={handleChannelCostsChange}
-            />
-
-            <Section
-              title="流入経路（チャネル）別分析"
-              description="チャネルごとの応募数シェア・通過率・コスト・採用単価"
-            >
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <ChannelChart data={channelStats} />
-                <ChannelTable data={channelStats} />
+            {/* 詳細分析はタブで切り替え、画面を縦に伸ばしすぎないようにする */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="px-4 pt-2">
+                <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
               </div>
-            </Section>
+              <div className="space-y-4 p-4">
+                {activeTab === 'pipeline' && (
+                  <>
+                    <Section
+                      title="ポジション別パイプライン（応募〜内定承諾）"
+                      description="各ステージの人数・直前ステージからの遷移率・応募者全体に対する到達率"
+                    >
+                      <PositionPipelineTable data={positionPipelines} />
+                    </Section>
+                    <Section title="月別応募数推移">
+                      <MonthlyTrendChart data={monthlyTrend} />
+                    </Section>
+                    <Section
+                      title="選考スピード（リードタイム）"
+                      description="隣接ステージ間の平均通過日数（カジュアル面談は除く）"
+                    >
+                      <LeadTimeChart data={leadTimes} />
+                    </Section>
+                  </>
+                )}
 
-            <Section
-              title="面接官の甘辛分析"
-              description="同ステージの全体平均と比較した各面接官の評価傾向"
-            >
-              <InterviewerTable rows={interviewerRows} stageAverages={stageAverages} />
-            </Section>
+                {activeTab === 'channel' && (
+                  <Section
+                    title="流入経路（チャネル）別分析"
+                    description="チャネルごとの応募数シェア・通過率・コスト・採用単価"
+                  >
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <ChannelChart data={channelStats} />
+                      <ChannelTable data={channelStats} />
+                    </div>
+                  </Section>
+                )}
 
-            <div className="space-y-2">
-              <p className="text-xs text-slate-400">
-                以下はヘルススコアの計算に使う詳細設定です。通常は変更不要です。
-              </p>
-              {positions.map((position) => (
-                <KpiSettings
-                  key={position}
-                  position={position}
-                  config={getHealthScoreConfigForPosition(healthScoreConfigs, position)}
-                  onChange={(next) => handleHealthScoreConfigChange(position, next)}
-                />
-              ))}
+                {activeTab === 'interviewer' && (
+                  <Section
+                    title="面接官の甘辛分析"
+                    description="同ステージの全体平均と比較した各面接官の評価傾向"
+                  >
+                    <InterviewerTable rows={interviewerRows} stageAverages={stageAverages} />
+                  </Section>
+                )}
+              </div>
             </div>
           </>
         )}
       </main>
+
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)}>
+          <TargetSettings positions={positions} targets={targets} onChange={handleTargetsChange} defaultOpen />
+          <ChannelCostSettings
+            channels={channels}
+            costs={channelCosts}
+            onChange={handleChannelCostsChange}
+            defaultOpen
+          />
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400">
+              ヘルススコアの計算に使う、ポジションごとの目標採用人数・期間・各区間の遷移率の設定です。
+            </p>
+            {positions.map((position) => (
+              <KpiSettings
+                key={position}
+                position={position}
+                config={getHealthScoreConfigForPosition(healthScoreConfigs, position)}
+                onChange={(next) => handleHealthScoreConfigChange(position, next)}
+              />
+            ))}
+          </div>
+        </SettingsModal>
+      )}
     </div>
   );
 }

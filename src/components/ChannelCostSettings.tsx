@@ -4,10 +4,11 @@ interface Props {
   channels: string[];
   costs: Record<string, number>;
   onChange: (costs: Record<string, number>) => void;
+  defaultOpen?: boolean;
 }
 
-export default function ChannelCostSettings({ channels, costs, onChange }: Props) {
-  const [open, setOpen] = useState(false);
+export default function ChannelCostSettings({ channels, costs, onChange, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
 
   const updateCost = (channel: string, value: number) => {
     onChange({ ...costs, [channel]: value });

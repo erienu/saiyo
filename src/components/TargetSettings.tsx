@@ -5,10 +5,11 @@ interface Props {
   positions: string[];
   targets: PositionTarget[];
   onChange: (targets: PositionTarget[]) => void;
+  defaultOpen?: boolean;
 }
 
-export default function TargetSettings({ positions, targets, onChange }: Props) {
-  const [open, setOpen] = useState(false);
+export default function TargetSettings({ positions, targets, onChange, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
 
   const targetFor = (position: string) =>
     targets.find((t) => t.position === position) ?? { position, targetCount: 0, period: '' };
