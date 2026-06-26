@@ -201,7 +201,6 @@ function App() {
 
   const hiredCount = filtered.filter((a) => a.status === '内定承諾').length;
   const activeCount = filtered.filter((a) => a.status === '進行中').length;
-  const dropoutCount = filtered.filter((a) => a.status === '離脱').length;
 
   const handleCsvLoad = (text: string) => {
     const { applicants: parsed, errors } = parseApplicantsCsv(text);
@@ -314,7 +313,6 @@ function App() {
                 { label: '応募者数', value: String(filtered.length) },
                 { label: '進行中', value: String(activeCount) },
                 { label: '内定承諾（採用）', value: String(hiredCount) },
-                { label: '離脱', value: String(dropoutCount) },
                 {
                   label: '応募〜内定承諾 平均日数',
                   value: overallLeadTime !== null ? `${overallLeadTime}日` : '—',
