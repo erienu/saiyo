@@ -112,20 +112,24 @@ export interface ChannelStat {
 
 /**
  * 流入経路（チャネル）別の応募数・通過率・コスト・採用単価。
- * `channelCosts`でチャネルごとの概算コスト(手入力)を渡すとそれを優先して使う。
+ * `channelCosts`でチャネルごとの「応募者1人あたりの概算コスト」(手入力)を渡すと、
+ * 応募者数を掛けた額をそのチャネルの合計コストとして使う。
  * 未設定の場合はCSVのコスト列(applicant.cost)の合計を使う。
  */
 export function buildChannelStats(
   applicants: Applicant[],
-  channelCosts: Record<string, number> = {}
+  channelCostPerApplicant: Record<string, number> = {}
 ): ChannelStat[] {
   const channels = getChannels(applicants);
   return channels
     .map((channel) => {
       const rows = applicants.filter((a) => a.channel === channel);
       const hired = rows.filter((a) => a.status === '内定承諾').length;
-      const manualCost = channelCosts[channel];
-      const totalCost = manualCost !== undefined ? manualCost : rows.reduce((s, a) => s + a.cost, 0);
+      const manualCostPerApplicant = channelCostPerApplicant[channel];
+      const totalCost =
+        manualCostPerApplicant !== undefined
+          ? manualCostPerApplicant * rows.length
+          : rows.reduce((s, a) => s + a.cost, 0);
       return {
         channel,
         applicants: rows.length,

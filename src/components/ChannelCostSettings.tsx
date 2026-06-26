@@ -21,13 +21,14 @@ export default function ChannelCostSettings({ channels, costs, onChange, default
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
       >
-        <span>チャネル別コストの設定（概算）</span>
+        <span>チャネル別コストの設定（1人あたりの概算）</span>
         <span className="text-xs text-slate-400">{open ? '閉じる' : '開く'}</span>
       </button>
       {open && (
         <div className="mt-3 space-y-2">
           <p className="text-xs text-slate-400">
-            CSVにコスト情報がない場合、チャネルごとの概算費用（媒体費・エージェント費用など合計）を入力すると採用単価が計算されます。
+            CSVにコスト情報がない場合、チャネルごとの「応募者1人あたりの概算コスト」（媒体費・エージェント費用の相場感）を入力すると、
+            応募者数を掛けた額が合計コストとして採用単価の計算に使われます。
           </p>
           {channels.length === 0 && (
             <p className="text-xs text-slate-400">先にCSVを読み込むとチャネル一覧が表示されます。</p>
@@ -36,7 +37,7 @@ export default function ChannelCostSettings({ channels, costs, onChange, default
             <div key={channel} className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 p-2">
               <span className="min-w-[10rem] text-sm font-medium text-slate-700">{channel}</span>
               <label className="flex items-center gap-1 text-xs text-slate-500">
-                概算コスト
+                1人あたりの概算コスト
                 <NumberInput
                   min={0}
                   value={costs[channel] ?? 0}
