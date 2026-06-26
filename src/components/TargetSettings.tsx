@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import NumberInput from './NumberInput';
 import type { PositionTarget } from '../types';
 
 interface Props {
@@ -43,12 +44,10 @@ export default function TargetSettings({ positions, targets, onChange, defaultOp
                 <span className="min-w-[10rem] text-sm font-medium text-slate-700">{p}</span>
                 <label className="flex items-center gap-1 text-xs text-slate-500">
                   目標人数
-                  <input
-                    type="number"
+                  <NumberInput
                     min={0}
                     value={t.targetCount}
-                    onChange={(e) => updateTarget(p, { targetCount: Number(e.target.value) || 0 })}
-                    className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                    onChange={(n) => updateTarget(p, { targetCount: n })}
                   />
                 </label>
                 <label className="flex items-center gap-1 text-xs text-slate-500">

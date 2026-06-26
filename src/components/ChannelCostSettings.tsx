@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import NumberInput from './NumberInput';
 
 interface Props {
   channels: string[];
@@ -36,11 +37,10 @@ export default function ChannelCostSettings({ channels, costs, onChange, default
               <span className="min-w-[10rem] text-sm font-medium text-slate-700">{channel}</span>
               <label className="flex items-center gap-1 text-xs text-slate-500">
                 概算コスト
-                <input
-                  type="number"
+                <NumberInput
                   min={0}
                   value={costs[channel] ?? 0}
-                  onChange={(e) => updateCost(channel, Number(e.target.value) || 0)}
+                  onChange={(n) => updateCost(channel, n)}
                   className="w-28 rounded border border-slate-300 px-2 py-1 text-sm"
                 />
                 円

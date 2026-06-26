@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { computeFunnelForecast } from '../lib/metrics';
+import NumberInput from './NumberInput';
 import type { HealthScoreConfig, PipelineRates } from '../types';
 
 interface Props {
@@ -39,12 +40,10 @@ export default function KpiSettings({ position, config, onChange, defaultOpen = 
           <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-1 text-xs text-slate-500">
               目標採用人数
-              <input
-                type="number"
+              <NumberInput
                 min={0}
                 value={config.targetHireCount}
-                onChange={(e) => onChange({ ...config, targetHireCount: Number(e.target.value) || 0 })}
-                className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                onChange={(n) => onChange({ ...config, targetHireCount: n })}
               />
               人
             </label>
@@ -73,12 +72,11 @@ export default function KpiSettings({ position, config, onChange, defaultOpen = 
                 <label key={f.key} className="flex items-center justify-between gap-2 text-xs text-slate-500">
                   <span>{f.label}</span>
                   <span className="flex items-center gap-1">
-                    <input
-                      type="number"
+                    <NumberInput
                       min={0}
                       max={100}
                       value={config.rates[f.key]}
-                      onChange={(e) => updateRate(f.key, Number(e.target.value) || 0)}
+                      onChange={(n) => updateRate(f.key, n)}
                       className="w-16 rounded border border-slate-300 px-2 py-1 text-sm"
                     />
                     %
@@ -91,24 +89,22 @@ export default function KpiSettings({ position, config, onChange, defaultOpen = 
           <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3">
             <label className="flex items-center gap-1 text-xs text-slate-500">
               赤信号(未満)
-              <input
-                type="number"
+              <NumberInput
                 min={0}
                 max={100}
                 value={config.redBelowPercent}
-                onChange={(e) => onChange({ ...config, redBelowPercent: Number(e.target.value) || 0 })}
+                onChange={(n) => onChange({ ...config, redBelowPercent: n })}
                 className="w-16 rounded border border-slate-300 px-2 py-1 text-sm"
               />
               %
             </label>
             <label className="flex items-center gap-1 text-xs text-slate-500">
               黄信号(未満)
-              <input
-                type="number"
+              <NumberInput
                 min={0}
                 max={100}
                 value={config.yellowBelowPercent}
-                onChange={(e) => onChange({ ...config, yellowBelowPercent: Number(e.target.value) || 0 })}
+                onChange={(n) => onChange({ ...config, yellowBelowPercent: n })}
                 className="w-16 rounded border border-slate-300 px-2 py-1 text-sm"
               />
               %（これ以上は緑信号）
